@@ -17,29 +17,24 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
             ShouldWriteDefaults = shouldWriteDefaults;
         }
 
-        public static CgeConflictPrevention OfIntegrator(bool writeDefaults)
-        {
-            return new CgeConflictPrevention(false, writeDefaults);
-        }
-
-        public static CgeConflictPrevention OfFxLayer(WriteDefaultsRecommendationMode mode)
+        public static CgeConflictPrevention OfFxLayer(WriteDefaultsMode mode)
         {
             switch (mode)
             {
-                case WriteDefaultsRecommendationMode.FollowVrChatRecommendationWriteDefaultsOff:
+                case WriteDefaultsMode.Off:
                     return GenerateExhaustiveAnimationsWithoutWriteDefaults;
-                case WriteDefaultsRecommendationMode.UseUnsupportedWriteDefaultsOn:
+                case WriteDefaultsMode.On:
                     return GenerateExhaustiveAnimationsWithWriteDefaults;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
             }
         }
 
-        public static CgeConflictPrevention OfGestureLayer(WriteDefaultsRecommendationMode compilerWriteDefaultsRecommendationModeGesture, GestureLayerTransformCapture compilerGestureLayerTransformCapture)
+        public static CgeConflictPrevention OfGestureLayer(WriteDefaultsMode compilerWriteDefaultsModeGesture, GestureLayerTransformCapture compilerGestureLayerTransformCapture)
         {
             return new CgeConflictPrevention(
                 compilerGestureLayerTransformCapture == GestureLayerTransformCapture.CaptureDefaultTransformsFromAvatar,
-                compilerWriteDefaultsRecommendationModeGesture == WriteDefaultsRecommendationMode.UseUnsupportedWriteDefaultsOn);
+                compilerWriteDefaultsModeGesture == WriteDefaultsMode.On);
         }
     }
 }

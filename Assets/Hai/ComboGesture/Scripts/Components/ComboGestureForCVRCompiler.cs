@@ -1,16 +1,13 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
-using VRC.SDK3.Avatars.Components;
 
 namespace Hai.ComboGesture.Scripts.Components
 {
-    public class ComboGestureCompiler : MonoBehaviour
+    public class ComboGestureForCVRCompiler : MonoBehaviour
     {
         public string activityStageName;
         public List<GestureComboStageMapper> comboLayers;
-        public RuntimeAnimatorController animatorController;
-        public bool useGesturePlayableLayer;
-        public RuntimeAnimatorController gesturePlayableLayerController;
+        public RuntimeAnimatorController mainAnimatorController;
         public RuntimeAnimatorController folderToGenerateNeutralizedAssetsIn;
         public RuntimeAnimatorController assetContainer;
         public bool generateNewContainerEveryTime;
@@ -23,19 +20,12 @@ namespace Hai.ComboGesture.Scripts.Components
 
         public AvatarMask expressionsAvatarMask;
         public AvatarMask logicalAvatarMask;
-        public AvatarMask weightCorrectionAvatarMask;
-        public AvatarMask gesturePlayableLayerExpressionsAvatarMask;
-        public AvatarMask gesturePlayableLayerTechnicalAvatarMask;
 
-        public WriteDefaultsRecommendationMode writeDefaultsRecommendationMode = WriteDefaultsRecommendationMode.FollowVrChatRecommendationWriteDefaultsOff;
-        public WriteDefaultsRecommendationMode writeDefaultsRecommendationModeGesture = WriteDefaultsRecommendationMode.UseUnsupportedWriteDefaultsOn;
+        public WriteDefaultsMode writeDefaultsMode = WriteDefaultsMode.On;
         public GestureLayerTransformCapture gestureLayerTransformCapture = GestureLayerTransformCapture.CaptureDefaultTransformsFromAvatar;
-        public ConflictFxLayerMode conflictFxLayerMode = ConflictFxLayerMode.RemoveTransformsAndMuscles;
-        public WeightCorrectionMode weightCorrectionMode = WeightCorrectionMode.UseRecommendedConfiguration;
+        public ConflictCvrLayerMode conflictLayerMode = ConflictCvrLayerMode.RemoveMuscles;
 
         public bool useViveAdvancedControlsForNonFistAnalog;
-
-        public AvatarMask generatedAvatarMask;
 
         public bool editorAdvancedFoldout;
 
@@ -43,20 +33,13 @@ namespace Hai.ComboGesture.Scripts.Components
         public AnimationClip fallbackParamList;
         public bool doNotFixSingleKeyframes;
 
-        public VRCAvatarDescriptor avatarDescriptor;
+        public Animator avatarDescriptor;
         public bool bypassMandatoryAvatarDescriptor;
 
-        public ParameterMode parameterMode;
+        // public ParameterMode parameterMode;
         public ComboGestureDynamics dynamics;
-        public bool doNotForceBlinkBlendshapes;
 
-        public string mmdCompatibilityToggleParameter;
         public int totalNumberOfGenerations;
-
-        public bool WillUseGestureWeightCorrection()
-        {
-            return weightCorrectionMode != WeightCorrectionMode.UseNativeWeight;
-        }
     }
 
     [System.Serializable]
@@ -94,9 +77,9 @@ namespace Hai.ComboGesture.Scripts.Components
     }
 
     [System.Serializable]
-    public enum WriteDefaultsRecommendationMode
+    public enum WriteDefaultsMode
     {
-        FollowVrChatRecommendationWriteDefaultsOff, UseUnsupportedWriteDefaultsOn
+        Off, On
     }
 
     [System.Serializable]
@@ -104,21 +87,16 @@ namespace Hai.ComboGesture.Scripts.Components
     {
         CaptureDefaultTransformsFromAvatar, DoNotCaptureTransforms
     }
+    
     [System.Serializable]
-    public enum ConflictFxLayerMode
+    public enum ConflictCvrLayerMode
     {
-        RemoveTransformsAndMuscles, KeepBoth, KeepOnlyTransformsAndMuscles, KeepOnlyTransforms
+        RemoveMuscles, Keep
     }
 
-    [System.Serializable]
-    public enum WeightCorrectionMode
-    {
-        UseRecommendedConfiguration, UseWeightCorrection, UseNativeWeight
-    }
-
-    [System.Serializable]
-    public enum ParameterMode
-    {
-        MultipleBools, SingleInt
-    }
+    // [System.Serializable]
+    // public enum ParameterMode
+    // {
+        // MultipleBools, SingleInt
+    // }
 }

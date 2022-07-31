@@ -1,13 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Hai.ComboGesture.Scripts.Components;
 using Hai.ComboGesture.Scripts.Editor.Internal.CgeAac;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
-using VRC.SDK3.Avatars.Components;
 using Object = UnityEngine.Object;
 
 namespace Hai.ComboGesture.Scripts.Editor.Internal
@@ -20,34 +18,26 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
         private readonly float _analogBlinkingUpperThreshold;
         private readonly CgeFeatureToggles _featuresToggles;
         private readonly CgeConflictPrevention _conflictPrevention;
-        private readonly CgeConflictPrevention _conflictPreventionTempGestureLayer;
-        private readonly ConflictFxLayerMode _compilerConflictFxLayerMode;
+        private readonly ConflictCvrLayerMode _compilerConflictLayerMode;
         private readonly AnimationClip _compilerIgnoreParamList;
         private readonly AnimationClip _compilerFallbackParamList;
-        private readonly VRCAvatarDescriptor _avatarDescriptor;
+        private readonly Animator _avatarDescriptor;
         private readonly AvatarMask _expressionsAvatarMask;
         private readonly AvatarMask _logicalAvatarMask;
-        private readonly AvatarMask _weightCorrectionAvatarMask;
         private readonly CgeAssetContainer _assetContainer;
-        private readonly bool _useGestureWeightCorrection;
         private readonly AnimatorController _gesturePlayableLayerController;
-        private readonly AvatarMask _gesturePlayableLayerExpressionsAvatarMask;
-        private readonly AvatarMask _gesturePlayableLayerTechnicalAvatarMask;
         private readonly ParameterGeneration _parameterGeneration;
-        private readonly bool _useSmoothing;
         private readonly bool _universalAnalogSupport;
         private readonly AvatarMask _nothingMask;
         private readonly ComboGestureDynamicsItem[] _dynamicsLayers;
-        private readonly bool _doNotForceBlinkBlendshapes;
-        private readonly string _mmdCompatibilityToggleParameter;
 
         public ComboGestureCompilerInternal(
-            ComboGestureCompiler compiler,
+            ComboGestureForCVRCompiler compiler,
             CgeAssetContainer assetContainer)
         {
             _comboLayers = compiler.comboLayers;
             _dynamicsLayers = compiler.dynamics != null ? compiler.dynamics.items : new ComboGestureDynamicsItem[] { };
-            _parameterGeneration = _comboLayers.Count <= 1 ? ParameterGeneration.Unique : (compiler.parameterMode == ParameterMode.SingleInt ? ParameterGeneration.UserDefinedActivity : ParameterGeneration.VirtualActivity);
+            _parameterGeneration = _comboLayers.Count <= 1 ? ParameterGeneration.Unique : ParameterGeneration.UserDefinedActivity;
             switch (_parameterGeneration)
             {
                 case ParameterGeneration.Unique:
@@ -60,15 +50,13 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
                 default:
                     throw new ArgumentOutOfRangeException();
             }
-            _animatorController = (AnimatorController)compiler.animatorController;
-            _gesturePlayableLayerController = compiler.gesturePlayableLayerController as AnimatorController;
+            _animatorController = (AnimatorController)compiler.mainAnimatorController;
             _analogBlinkingUpperThreshold = compiler.analogBlinkingUpperThreshold;
             _featuresToggles = (compiler.doNotGenerateBlinkingOverrideLayer ? CgeFeatureToggles.DoNotGenerateBlinkingOverrideLayer : 0)
                                | (compiler.doNotGenerateWeightCorrectionLayer ? CgeFeatureToggles.DoNotGenerateWeightCorrectionLayer : 0)
                                | (compiler.doNotFixSingleKeyframes ? CgeFeatureToggles.DoNotFixSingleKeyframes : 0);
-            _conflictPrevention = CgeConflictPrevention.OfFxLayer(compiler.writeDefaultsRecommendationMode);
-            _conflictPreventionTempGestureLayer = CgeConflictPrevention.OfGestureLayer(compiler.writeDefaultsRecommendationModeGesture, compiler.gestureLayerTransformCapture);
-            _compilerConflictFxLayerMode = compiler.conflictFxLayerMode;
+            _conflictPrevention = CgeConflictPrevention.OfFxLayer(compiler.writeDefaultsMode);
+            _compilerConflictLayerMode = compiler.conflictLayerMode;
             _compilerIgnoreParamList = compiler.ignoreParamList;
             _compilerFallbackParamList = compiler.fallbackParamList;
             _avatarDescriptor = compiler.avatarDescriptor;
@@ -81,65 +69,13 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
             _expressionsAvatarMask = compiler.expressionsAvatarMask ? compiler.expressionsAvatarMask : noTransformsMask;
             _logicalAvatarMask = compiler.logicalAvatarMask ? compiler.logicalAvatarMask : noTransformsMask;
-            _weightCorrectionAvatarMask = compiler.weightCorrectionAvatarMask ? compiler.weightCorrectionAvatarMask : noTransformsMask;
-            _gesturePlayableLayerExpressionsAvatarMask = compiler.gesturePlayableLayerExpressionsAvatarMask ? compiler.gesturePlayableLayerExpressionsAvatarMask : _nothingMask;
-            _gesturePlayableLayerTechnicalAvatarMask = compiler.gesturePlayableLayerTechnicalAvatarMask ? compiler.gesturePlayableLayerTechnicalAvatarMask : _nothingMask;
             _assetContainer = assetContainer;
-            _useGestureWeightCorrection = compiler.WillUseGestureWeightCorrection();
-            _useSmoothing = _useGestureWeightCorrection;
             _universalAnalogSupport = compiler.useViveAdvancedControlsForNonFistAnalog;
-            _doNotForceBlinkBlendshapes = compiler.doNotForceBlinkBlendshapes;
-            _mmdCompatibilityToggleParameter = compiler.mmdCompatibilityToggleParameter;
-        }
-
-        public ComboGestureCompilerInternal(
-            ComboGestureIntegrator integrator)
-        {
-            _animatorController = (AnimatorController)integrator.animatorController;
-            _conflictPrevention = CgeConflictPrevention.OfIntegrator(integrator.writeDefaults);
-
-            // FIXME: Incorrect pattern in use here, none of those are necessary
-            _comboLayers = new List<GestureComboStageMapper>();
-            _parameterGeneration = ParameterGeneration.Unique;
-            _gesturePlayableLayerController = null;
-            _analogBlinkingUpperThreshold = 0f;
-            _featuresToggles = 0;
-            _conflictPreventionTempGestureLayer = CgeConflictPrevention.OfFxLayer(WriteDefaultsRecommendationMode.UseUnsupportedWriteDefaultsOn);
-            _compilerConflictFxLayerMode = ConflictFxLayerMode.KeepBoth;
-            _compilerIgnoreParamList = new AnimationClip();
-            _compilerFallbackParamList = new AnimationClip();
-            _avatarDescriptor = null;
-            _expressionsAvatarMask = null;
-            _logicalAvatarMask = null;
-            _weightCorrectionAvatarMask = null;
-            _gesturePlayableLayerExpressionsAvatarMask = null;
-            _gesturePlayableLayerTechnicalAvatarMask = null;
-            _assetContainer = null;
-            _useGestureWeightCorrection = false;
-            _useSmoothing = _useGestureWeightCorrection;
-            _universalAnalogSupport = false;
         }
 
         enum ParameterGeneration
         {
             Unique, UserDefinedActivity, VirtualActivity
-        }
-
-        public void IntegrateWeightCorrection()
-        {
-            CreateOrReplaceWeightCorrection(
-                _nothingMask,
-                _assetContainer,
-                _animatorController,
-                _conflictPrevention,
-                _universalAnalogSupport
-            );
-            CreateOrReplaceSmoothing(_nothingMask, _assetContainer, _animatorController, _conflictPrevention);
-
-            ReapAnimator(_animatorController);
-
-            AssetDatabase.Refresh();
-            EditorUtility.ClearProgressBar();
         }
 
         private static AvatarMask CreateNothingMask()
@@ -173,39 +109,6 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
         public void DoOverwriteAnimatorFxLayer()
         {
-            DeleteDeprecatedControllerLayer();
-
-            if (_parameterGeneration == ParameterGeneration.VirtualActivity)
-            {
-                CreateOrReplaceBooleansToVirtualActivityMenu();
-            }
-            else
-            {
-                DeleteBooleansToVirtualActivityMenu();
-            }
-
-            if (!Feature(CgeFeatureToggles.DoNotGenerateWeightCorrectionLayer))
-            {
-                if (_useGestureWeightCorrection)
-                {
-                    if (_useSmoothing)
-                    {
-                        DeleteWeightCorrection(_animatorController);
-                        CreateOrReplaceSmoothing(_weightCorrectionAvatarMask, _assetContainer, _animatorController, _conflictPrevention);
-                    }
-                    else
-                    {
-                        CreateOrReplaceWeightCorrection(_weightCorrectionAvatarMask, _assetContainer, _animatorController, _conflictPrevention, _universalAnalogSupport);
-                        DeleteSmoothing(_animatorController);
-                    }
-                }
-                else
-                {
-                    DeleteWeightCorrection(_animatorController);
-                    DeleteSmoothing(_animatorController);
-                }
-            }
-
             var emptyClip = _assetContainer.ExposeCgeAac().DummyClipLasting(1, CgeAacFlUnit.Frames).Clip;
 
             var manifestBindings = CreateManifestBindings(emptyClip);
@@ -221,64 +124,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
                 DeleteImpulseView(_animatorController);
             }
 
-            if (!Feature(CgeFeatureToggles.DoNotGenerateBlinkingOverrideLayer))
-            {
-                CreateOrReplaceBlinkingOverrideView(manifestBindings);
-            }
-
-            DeleteDeprecatedLipsyncOverrideView();
-
             ReapAnimator(_animatorController);
-
-            AssetDatabase.Refresh();
-            EditorUtility.ClearProgressBar();
-        }
-
-        private static void CreateOrReplaceSmoothing(AvatarMask weightCorrectionAvatarMask, CgeAssetContainer assetContainer, AnimatorController animatorController, CgeConflictPrevention conflictPrevention)
-        {
-            new CgeLayerForAnalogFistSmoothing(assetContainer, weightCorrectionAvatarMask, conflictPrevention.ShouldWriteDefaults, animatorController).Create();
-        }
-
-        public void DoOverwriteAnimatorGesturePlayableLayer()
-        {
-            var emptyClip = _assetContainer.ExposeCgeAac().DummyClipLasting(1, CgeAacFlUnit.Frames).Clip;
-
-            if (!Feature(CgeFeatureToggles.DoNotGenerateWeightCorrectionLayer))
-            {
-                if (_useGestureWeightCorrection)
-                {
-                    if (_useSmoothing)
-                    {
-                        DeleteWeightCorrection(_gesturePlayableLayerController);
-                        CreateOrReplaceSmoothing(_weightCorrectionAvatarMask, _assetContainer, _gesturePlayableLayerController, _conflictPreventionTempGestureLayer);
-                    }
-                    else
-                    {
-                        CreateOrReplaceWeightCorrection(_weightCorrectionAvatarMask, _assetContainer, _gesturePlayableLayerController, _conflictPrevention, _universalAnalogSupport);
-                        DeleteSmoothing(_gesturePlayableLayerController);
-                    }
-                }
-                else
-                {
-                    DeleteWeightCorrection(_gesturePlayableLayerController);
-                    DeleteSmoothing(_gesturePlayableLayerController);
-                }
-            }
-
-            var manifestBindings = CreateManifestBindings(emptyClip);
-
-            CreateOrReplaceGesturePlayableLayerExpressionsView(emptyClip, manifestBindings);
-
-            if (manifestBindings.Any(binding => binding.IsAvatarDynamics && binding.DynamicsDescriptor.descriptor.isOnEnter))
-            {
-                CreateOrReplaceImpulseView(manifestBindings, _gesturePlayableLayerController);
-            }
-            else
-            {
-                DeleteImpulseView(_gesturePlayableLayerController);
-            }
-
-            ReapAnimator(_gesturePlayableLayerController);
 
             AssetDatabase.Refresh();
             EditorUtility.ClearProgressBar();
@@ -398,21 +244,6 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
             }
         }
 
-        private void CreateOrReplaceBooleansToVirtualActivityMenu()
-        {
-            new CgeLayerForVirtualActivity(_assetContainer, _animatorController, _logicalAvatarMask, _conflictPrevention.ShouldWriteDefaults, _comboLayers).Create();
-        }
-
-        private void DeleteBooleansToVirtualActivityMenu()
-        {
-            CgeLayerForVirtualActivity.Delete(_assetContainer, _animatorController);
-        }
-
-        private static void CreateOrReplaceWeightCorrection(AvatarMask weightCorrectionAvatarMask, CgeAssetContainer assetContainer, AnimatorController animatorController, CgeConflictPrevention conflictPrevention, bool universalAnalogSupport)
-        {
-            new CgeLayerForWeightCorrection(assetContainer, animatorController, weightCorrectionAvatarMask, conflictPrevention.ShouldWriteDefaults, universalAnalogSupport).Create();
-        }
-
         private void CreateOrReplaceExpressionsView(AnimationClip emptyClip, List<CgeManifestBinding> manifestBindings)
         {
             var avatarFallbacks = new CgeAvatarSnapshot(_avatarDescriptor, _compilerFallbackParamList).CaptureFallbacks();
@@ -423,23 +254,20 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
                 _activityStageName,
                 _conflictPrevention,
                 _assetContainer,
-                _compilerConflictFxLayerMode,
+                _compilerConflictLayerMode,
                 _compilerIgnoreParamList,
                 avatarFallbacks,
                 _animatorController,
-                _useGestureWeightCorrection,
-                _useSmoothing,
                 manifestBindings,
                 _avatarDescriptor,
-                _doNotForceBlinkBlendshapes,
-                _mmdCompatibilityToggleParameter
+                "" // MMD Toggle
             ).Create();
         }
 
         private void CreateOrReplaceImpulseView(List<CgeManifestBinding> manifestBindings, AnimatorController animatorController)
         {
             var aac = _assetContainer.ExposeCgeAac();
-            var layer = aac.CreateSupportingArbitraryControllerLayer(animatorController, "Hai_GestureImpulse")
+            var layer = aac.CreateSupportingArbitraryControllerLayer(animatorController, "CGCVR_GestureImpulse")
                 .WithAvatarMask(_logicalAvatarMask);
 
             var onEnterBindings = manifestBindings
@@ -553,69 +381,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
         private void DeleteImpulseView(AnimatorController animatorController)
         {
-            _assetContainer.ExposeCgeAac().CGE_RemoveSupportingArbitraryControllerLayer(animatorController, "Hai_GestureImpulse");
-        }
-
-        private void CreateOrReplaceGesturePlayableLayerExpressionsView(AnimationClip emptyClip, List<CgeManifestBinding> manifestBindings)
-        {
-            var gesturePlayableLayerExpressionsAvatarMask = _gesturePlayableLayerExpressionsAvatarMask
-                ? _gesturePlayableLayerExpressionsAvatarMask
-                : _nothingMask;
-
-            var avatarFallbacks = new CgeAvatarSnapshot(_avatarDescriptor, _compilerFallbackParamList).CaptureFallbacks();
-            new CgeLayerForExpressionsView(
-                _featuresToggles,
-                gesturePlayableLayerExpressionsAvatarMask,
-                emptyClip,
-                _activityStageName,
-                _conflictPreventionTempGestureLayer,
-                _assetContainer,
-                ConflictFxLayerMode.KeepOnlyTransforms,
-                _compilerIgnoreParamList,
-                avatarFallbacks,
-                _gesturePlayableLayerController,
-                _useGestureWeightCorrection,
-                _useSmoothing,
-                manifestBindings,
-                _avatarDescriptor,
-                _doNotForceBlinkBlendshapes,
-                _mmdCompatibilityToggleParameter
-            ).Create();
-        }
-
-        private void CreateOrReplaceBlinkingOverrideView(List<CgeManifestBinding> manifestBindings)
-        {
-            new CgeLayerForBlinkingOverrideView(_analogBlinkingUpperThreshold,
-                _logicalAvatarMask,
-                _animatorController,
-                _assetContainer,
-                manifestBindings,
-                _conflictPrevention.ShouldWriteDefaults).Create();
-        }
-
-        private void DeleteDeprecatedLipsyncOverrideView()
-        {
-            _assetContainer.ExposeCgeAac().CGE_RemoveSupportingArbitraryControllerLayer(_animatorController, "Hai_GestureLipsync");
-        }
-
-        private void DeleteDeprecatedControllerLayer()
-        {
-            _assetContainer.ExposeCgeAac().CGE_RemoveSupportingArbitraryControllerLayer(_animatorController, "Hai_GestureCtrl");
-        }
-
-        private void DeleteWeightCorrection(AnimatorController animatorController)
-        {
-            CgeLayerForWeightCorrection.Delete(_assetContainer, animatorController);
-        }
-
-        private void DeleteSmoothing(AnimatorController animatorController)
-        {
-            CgeLayerForAnalogFistSmoothing.Delete(_assetContainer, animatorController);
-        }
-
-        private bool Feature(CgeFeatureToggles feature)
-        {
-            return (_featuresToggles & feature) == feature;
+            _assetContainer.ExposeCgeAac().CGE_RemoveSupportingArbitraryControllerLayer(animatorController, "CGCVR_GestureImpulse");
         }
     }
 

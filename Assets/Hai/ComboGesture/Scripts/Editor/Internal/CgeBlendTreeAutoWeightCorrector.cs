@@ -11,15 +11,11 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
         public const string AutoGestureWeightParam_UniversalLeft = "_AutoGestureLeftWeight";
         public const string AutoGestureWeightParam_UniversalRight = "_AutoGestureRightWeight";
         private readonly List<CgeManifestBinding> _activityManifests;
-        private readonly bool _useGestureWeightCorrection;
-        private readonly bool _useSmoothing;
         private readonly CgeAssetContainer _assetContainer;
 
-        public CgeBlendTreeAutoWeightCorrector(List<CgeManifestBinding> activityManifests, bool useGestureWeightCorrection, bool useSmoothing, CgeAssetContainer assetContainer)
+        public CgeBlendTreeAutoWeightCorrector(List<CgeManifestBinding> activityManifests, CgeAssetContainer assetContainer)
         {
             _activityManifests = activityManifests;
-            _useGestureWeightCorrection = useGestureWeightCorrection;
-            _useSmoothing = useSmoothing;
             _assetContainer = assetContainer;
         }
 
@@ -119,11 +115,11 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
             switch (originalParameterName)
             {
                 case AutoGestureWeightParam:
-                    return side == CgeSide.Left ? "GestureLeftWeight" : "GestureRightWeight";
+                    return side == CgeSide.Left ? "GestureLeft" : "GestureRight";
                 case AutoGestureWeightParam_UniversalLeft:
-                    return "GestureLeftWeight";
+                    return "GestureLeft";
                 case AutoGestureWeightParam_UniversalRight:
-                    return "GestureRightWeight";
+                    return "GestureRight";
                 default:
                     return originalParameterName;
             }
@@ -131,21 +127,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
         private string HandleWeightCorrection(string originalTreeBlendParameter)
         {
-            // FIXME this is duplicate code
-            if (!_useGestureWeightCorrection)
-            {
-                return originalTreeBlendParameter;
-            }
-
-            switch (originalTreeBlendParameter)
-            {
-                case "GestureLeftWeight":
-                    return _useSmoothing ? CgeSharedLayerUtils.HaiGestureComboLeftWeightSmoothing : CgeSharedLayerUtils.HaiGestureComboLeftWeightProxy;
-                case "GestureRightWeight":
-                    return _useSmoothing ? CgeSharedLayerUtils.HaiGestureComboRightWeightSmoothing : CgeSharedLayerUtils.HaiGestureComboRightWeightProxy;
-                default:
-                    return originalTreeBlendParameter;
-            }
+            return originalTreeBlendParameter;
         }
     }
 

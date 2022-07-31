@@ -1,29 +1,28 @@
 ﻿using System;
 using UnityEditor;
 using UnityEngine;
-using VRC.SDK3.Avatars.Components;
 
 namespace Hai.ComboGesture.Scripts.Editor.Internal
 {
     internal class CgeAvatarSnapshot
     {
-        private readonly VRCAvatarDescriptor _vrcAvatarDescriptor;
+        private readonly Animator _avatarDescriptor;
         private readonly AnimationClip _compilerFallbackParamList;
 
-        public CgeAvatarSnapshot(VRCAvatarDescriptor avatarDescriptor, AnimationClip compilerFallbackParamList)
+        public CgeAvatarSnapshot(Animator avatarDescriptor, AnimationClip compilerFallbackParamList)
         {
-            _vrcAvatarDescriptor = avatarDescriptor;
+            _avatarDescriptor = avatarDescriptor;
             _compilerFallbackParamList = compilerFallbackParamList;
         }
 
         public AnimationClip CaptureFallbacks()
         {
-            if (_vrcAvatarDescriptor == null)
+            if (_avatarDescriptor == null)
             {
                 return _compilerFallbackParamList == null ? null : _compilerFallbackParamList;
             }
 
-            var that = _vrcAvatarDescriptor.transform;
+            var that = _avatarDescriptor.transform;
 
             var snapshot = new AnimationClip();
             MutateAnimationToSnapshotAllChildrenOf(snapshot, that, "");
@@ -37,12 +36,12 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
         public AvatarMask MaybeCaptureMask()
         {
-            if (_vrcAvatarDescriptor == null)
+            if (_avatarDescriptor == null)
             {
                 return null;
             }
 
-            var root = _vrcAvatarDescriptor.transform;
+            var root = _avatarDescriptor.transform;
 
             var mask = CreateMaskDisablingAllHierarchyOf(root);
 

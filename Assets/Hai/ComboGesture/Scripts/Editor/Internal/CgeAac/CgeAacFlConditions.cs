@@ -56,6 +56,41 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
         public ICgeAacFlCondition IsLessThan(float other) => Just(condition => condition.Add(Name, Less, other));
     }
 
+    public class CgeAacFlPseudoParameter : CgeAacFlParameter
+    {
+        internal static CgeAacFlPseudoParameter Internally(string name) => new CgeAacFlPseudoParameter(name);
+        protected CgeAacFlPseudoParameter(string name) : base(name) { }
+        public ICgeAacFlCondition IsPseudoEqualTo(PseudoThreshold other) => Just(condition =>
+        {
+            condition.Add(Name, AnimatorConditionMode.Less, other.upper + 0.01f);
+            condition.Add(Name, AnimatorConditionMode.Greater, other.lower - 0.01f);
+        });
+        public ICgeAacFlOrCondition IsPseudoNotEqualTo(PseudoThreshold other)
+        {
+            return new CgeAacFlPseudoParameterIsPseudoNotEqualToOrCondition(Name, other);
+        }
+
+        public struct PseudoThreshold
+        {
+            public PseudoThreshold(int lower, int upper)
+            {
+                this.lower = lower;
+                this.upper = upper;
+            }
+
+            public int lower;
+            public int upper;
+        }
+    }
+
+    public class CgeAacFlEnumPseudoParameter<TEnum> : CgeAacFlPseudoParameter where TEnum : Enum
+    {
+        internal static CgeAacFlEnumPseudoParameter<TInEnum> Internally<TInEnum>(string name) where TInEnum : Enum => new CgeAacFlEnumPseudoParameter<TInEnum>(name);
+        protected CgeAacFlEnumPseudoParameter(string name) : base(name)
+        {
+        }
+    }
+
     public class CgeAacFlIntParameter : CgeAacFlParameter
     {
         internal static CgeAacFlIntParameter Internally(string name) => new CgeAacFlIntParameter(name);
@@ -218,6 +253,29 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
                 }
             }
 
+            return pendingContinuations;
+        }
+    }
+
+    internal class CgeAacFlPseudoParameterIsPseudoNotEqualToOrCondition : ICgeAacFlOrCondition
+    {
+        private readonly string _name;
+        private readonly CgeAacFlPseudoParameter.PseudoThreshold _value;
+
+        public CgeAacFlPseudoParameterIsPseudoNotEqualToOrCondition(string name, CgeAacFlPseudoParameter.PseudoThreshold value)
+        {
+            _name = name;
+            _value = value;
+        }
+
+        public List<CgeAacFlTransitionContinuation> ApplyTo(CgeAacFlNewTransitionContinuation firstContinuation)
+        {
+            var pendingContinuations = new List<CgeAacFlTransitionContinuation>();
+            
+            var pendingContinuation = firstContinuation.When(CgeAacFlFloatParameter.Internally(_name).IsGreaterThan(_value.upper + 0.01f));
+            pendingContinuations.Add(pendingContinuation);
+            pendingContinuations.Add(pendingContinuation.Or().When(CgeAacFlFloatParameter.Internally(_name).IsLessThan(_value.lower - 0.01f)));
+            
             return pendingContinuations;
         }
     }

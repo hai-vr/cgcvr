@@ -25,7 +25,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
             return animatorController.layers
                 .Skip(1)
-                .Where(layer => !layer.name.StartsWith("Hai_Gesture"))
+                .Where(layer => !layer.name.StartsWith("CGCVR_Gesture"))
                 .Where(layer => layer.avatarMask == null)
                 .Where(layer => FindAllStates(layer).Any(state => state.writeDefaultValues == false));
         }

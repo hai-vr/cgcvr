@@ -6,7 +6,6 @@ using Hai.ComboGesture.Scripts.Editor.Internal.CgeAac;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
-using VRC.SDK3.Avatars.Components;
 using Random = UnityEngine.Random;
 
 namespace Hai.ComboGesture.Scripts.Editor.Internal
@@ -18,14 +17,12 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
         private readonly List<IComposedBehaviour> _composedBehaviours;
         private readonly string _activityStageName;
         private readonly bool _writeDefaultsForFaceExpressions;
-        private readonly bool _useGestureWeightCorrection;
-        private readonly bool _useSmoothing;
         private readonly CgeAacFlState _defaultState;
         private readonly string _mmdCompatibilityToggleParameter;
         private readonly int _layerIndex;
 
         public CgeExpressionCombiner(CgeAssetContainer assetContainer, CgeAacFlLayer layer,
-            List<IComposedBehaviour> composedBehaviours, string activityStageName, bool writeDefaultsForFaceExpressions, bool useGestureWeightCorrection, bool useSmoothing, CgeAacFlState defaultState,
+            List<IComposedBehaviour> composedBehaviours, string activityStageName, bool writeDefaultsForFaceExpressions, CgeAacFlState defaultState,
             string mmdCompatibilityToggleParameter,
             int layerIndex)
         {
@@ -33,8 +30,6 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
             _layer = layer;
             _activityStageName = activityStageName;
             _writeDefaultsForFaceExpressions = writeDefaultsForFaceExpressions;
-            _useGestureWeightCorrection = useGestureWeightCorrection;
-            _useSmoothing = useSmoothing;
             _defaultState = defaultState;
             _mmdCompatibilityToggleParameter = mmdCompatibilityToggleParameter;
             _layerIndex = layerIndex;
@@ -50,37 +45,6 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
             intern.WithExitPosition(1, _composedBehaviours.Count + 1);
 
             _defaultState.CGE_AutomaticallyMovesTo(intern);
-
-            // This must be the first layer for MMD compatiblity to take over everything else
-            if (!string.IsNullOrEmpty(_mmdCompatibilityToggleParameter))
-            {
-                var mmdOn = intern.NewState("MMD Compatibility ON")
-                    .WithWriteDefaultsSetTo(_writeDefaultsForFaceExpressions)
-                    .At(0, -3);
-
-                var onLayerControl = mmdOn.State.AddStateMachineBehaviour<VRCAnimatorLayerControl>();
-                onLayerControl.blendDuration = 0;
-                onLayerControl.goalWeight = 0;
-                onLayerControl.layer = _layerIndex;
-
-                intern.EntryTransitionsTo(mmdOn)
-                    .When(_layer.BoolParameter(_mmdCompatibilityToggleParameter).IsTrue())
-                    .And(_layer.Av3().InStation.IsTrue());
-
-                var mmdOff = intern.NewState("MMD Compatibility OFF")
-                    .WithWriteDefaultsSetTo(_writeDefaultsForFaceExpressions);
-
-                var offLayerControl = mmdOff.State.AddStateMachineBehaviour<VRCAnimatorLayerControl>();
-                offLayerControl.blendDuration = 0;
-                offLayerControl.goalWeight = 1;
-                offLayerControl.layer = _layerIndex;
-
-                mmdOn.TransitionsTo(mmdOff)
-                    .When(_layer.BoolParameter(_mmdCompatibilityToggleParameter).IsFalse())
-                    .Or().When(_layer.Av3().InStation.IsFalse());
-
-                mmdOff.Exits().AfterAnimationFinishes();
-            }
 
             var ssms = _composedBehaviours
                 .Select((behaviour, i) =>
@@ -245,14 +209,14 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
         private void BuildPcb(CgeAacFlStateMachine ssm, PermutationComposedBehaviour composed, CgeDynamicsDescriptor[] dynamicsExiters)
         {
-            var gestureLeftParam = _layer.Av3().GestureLeft;
-            var gestureRightParam = _layer.Av3().GestureRight;
+            var gestureLeftParam = _layer.Cvr().GestureLeft;
+            var gestureRightParam = _layer.Cvr().GestureRight;
             var activityStageNameParam = _activityStageName != null ? _layer.IntParameter(_activityStageName) : null;
 
             foreach (CgeHandPose right in Enum.GetValues(typeof(CgeHandPose)))
             {
                 var rightSsm = ssm.NewSubStateMachine($"Right {right}").At((int) right, 0);
-                ssm.EntryTransitionsTo(rightSsm).When(gestureRightParam.IsEqualTo((int) right));
+                ssm.EntryTransitionsTo(rightSsm).When(gestureRightParam.IsPseudoEqualTo(RemapPoseToCvr((int)right)));
 
                 // Short Restarts are no longer possible with Avatar Dynamics
                 // var restartCondition = rightSsm.Restarts().When(_layer.Av3().GestureRight.IsEqualTo((int) right));
@@ -271,11 +235,11 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
                     state.State.name = $"Left {left}";
 
                     rightSsm.EntryTransitionsTo(state)
-                        .When(gestureLeftParam.IsEqualTo((int) permutation.Left));
+                        .When(gestureLeftParam.IsPseudoEqualTo(RemapPoseToCvr((int)permutation.Left)));
                     state.Exits()
                         .WithTransitionDurationSeconds(composed.TransitionDuration)
-                        .When(gestureLeftParam.IsNotEqualTo((int) permutation.Left))
-                        .Or().When(gestureRightParam.IsNotEqualTo((int) permutation.Right));
+                        .When(gestureLeftParam.IsPseudoNotEqualTo(RemapPoseToCvr((int)permutation.Left)))
+                        .Or().When(gestureRightParam.IsPseudoNotEqualTo(RemapPoseToCvr((int)permutation.Right)));
                     if (!string.IsNullOrEmpty(_mmdCompatibilityToggleParameter))
                     {
                         state.Exits()
@@ -311,19 +275,21 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
         private void BuildOcb(CgeAacFlStateMachine ssm, OneHandComposedBehaviour composed, CgeDynamicsDescriptor[] dynamicsExiters)
         {
-            var which = composed.IsLeftHand ? _layer.Av3().GestureLeft : _layer.Av3().GestureRight;
+            var which = composed.IsLeftHand ? _layer.Cvr().GestureLeft : _layer.Cvr().GestureRight;
             foreach (var pair in composed.Behaviors)
             {
                 var handPose = pair.Key;
                 var behavior = pair.Value;
 
-                var state = AppendToSsm(ssm, behavior).At(0, (int)handPose);
+                var actualPose = RemapPoseToCvr((int)handPose);
+                var handPosePosition = (int)handPose;
+                var state = AppendToSsm(ssm, behavior).At(0, handPosePosition);
                 state.State.name = $"{(composed.IsLeftHand ? "Left" : "Right")} {handPose}";
                 ssm.EntryTransitionsTo(state)
-                    .When(which.IsEqualTo((int) handPose));
+                    .When(which.IsPseudoEqualTo(actualPose));
                 state.Exits()
                     .WithTransitionDurationSeconds(composed.TransitionDuration)
-                    .When(which.IsNotEqualTo((int) handPose));
+                    .When(which.IsPseudoNotEqualTo(actualPose));
                 if (!string.IsNullOrEmpty(_mmdCompatibilityToggleParameter))
                 {
                     state.Exits()
@@ -353,6 +319,27 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
 
             ssm.WithEntryPosition(-1, -1);
             ssm.WithExitPosition(1, 8);
+        }
+
+        private CgeAacFlPseudoParameter.PseudoThreshold RemapPoseToCvr(int handPose)
+        {
+            switch (handPose)
+            {
+                // The value of -100 should not happen:
+                // Neutral is effectively ignored (remnant of CGE for VRC); Fist-like takes over.
+                case 0: return new CgeAacFlPseudoParameter.PseudoThreshold(-100, -100); // Neutral
+                
+                // Fist-like accepts a range
+                case 1: return new CgeAacFlPseudoParameter.PseudoThreshold(0, 1); // Fist
+                
+                case 2: return new CgeAacFlPseudoParameter.PseudoThreshold(-1, -1); // HandOpen
+                case 3: return new CgeAacFlPseudoParameter.PseudoThreshold(4, 4); // Fingerpoint
+                case 4: return new CgeAacFlPseudoParameter.PseudoThreshold(5, 5); // Victory
+                case 5: return new CgeAacFlPseudoParameter.PseudoThreshold(6, 6); // RockNRoll
+                case 6: return new CgeAacFlPseudoParameter.PseudoThreshold(3, 3); // HandGun
+                case 7: return new CgeAacFlPseudoParameter.PseudoThreshold(2, 2); // ThumbsUp
+                default: return new CgeAacFlPseudoParameter.PseudoThreshold(0, 0); // (not applicable)
+            }
         }
 
         private void BuildScb(CgeAacFlStateMachine ssm, SingularComposedBehaviour composed, CgeDynamicsDescriptor[] dynamicsExiters)
@@ -438,27 +425,27 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
                         aab.Resting.Clip,
                         aab.Squeezing.Clip,
                         aab.HandSide == CgeHandSide.LeftHand
-                            ? LeftParam(_useGestureWeightCorrection, _useSmoothing)
-                            : RightParam(_useGestureWeightCorrection, _useSmoothing));
+                            ? LeftParam()
+                            : RightParam());
                 case CgeAnimatedBehaviorNature.PuppetToAnalog:
                     CgePuppetToAnalogAnimatedBehavior pta = (CgePuppetToAnalogAnimatedBehavior)behavior;
                     return CreateBlendTree(
                         pta.Resting,
                         pta.Squeezing.Clip,
                         pta.HandSide == CgeHandSide.LeftHand
-                            ? LeftParam(_useGestureWeightCorrection, _useSmoothing)
-                            : RightParam(_useGestureWeightCorrection, _useSmoothing));
+                            ? LeftParam()
+                            : RightParam());
                 case CgeAnimatedBehaviorNature.DualAnalog:
                     CgeDualAnalogAnimatedBehavior da = (CgeDualAnalogAnimatedBehavior)behavior;
-                    return CreateDualBlendTree(da.Resting.Clip, da.BothSqueezing.Clip, da.LeftSqueezing.Clip, da.RightSqueezing.Clip, _useGestureWeightCorrection, _useSmoothing);
+                    return CreateDualBlendTree(da.Resting.Clip, da.BothSqueezing.Clip, da.LeftSqueezing.Clip, da.RightSqueezing.Clip);
                 case CgeAnimatedBehaviorNature.PuppetToDualAnalog:
                     CgePuppetToDualAnalogAnimatedBehavior ptda = (CgePuppetToDualAnalogAnimatedBehavior)behavior;
-                    return CreateDualBlendTree(ptda.Resting, ptda.BothSqueezing.Clip, ptda.LeftSqueezing.Clip, ptda.RightSqueezing.Clip, _useGestureWeightCorrection, _useSmoothing);
+                    return CreateDualBlendTree(ptda.Resting, ptda.BothSqueezing.Clip, ptda.LeftSqueezing.Clip, ptda.RightSqueezing.Clip);
                 case CgeAnimatedBehaviorNature.Puppet:
                     return ((CgePuppetAnimatedBehavior)behavior).Tree;
                 case CgeAnimatedBehaviorNature.UniversalAnalog:
                     CgeUniversalAnalogAnimatedBehavior uaab = (CgeUniversalAnalogAnimatedBehavior)behavior;
-                    return CreateDualBlendTree(uaab.Resting.ToMotion(), uaab.BothSqueezing.Clip, uaab.LeftSqueezing.ToMotion(), uaab.RightSqueezing.ToMotion(), _useGestureWeightCorrection, _useSmoothing);
+                    return CreateDualBlendTree(uaab.Resting.ToMotion(), uaab.BothSqueezing.Clip, uaab.LeftSqueezing.ToMotion(), uaab.RightSqueezing.ToMotion());
                 case CgeAnimatedBehaviorNature.SimpleMassiveBlend:
                 case CgeAnimatedBehaviorNature.TwoDirectionsMassiveBlend:
                 case CgeAnimatedBehaviorNature.ComplexMassiveBlend:
@@ -612,37 +599,25 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
                     resting,
                     squeezing,
                     _layer.FloatParameter(isLeftSide
-                        ? LeftParam(_useGestureWeightCorrection, _useSmoothing)
-                        : RightParam(_useGestureWeightCorrection, _useSmoothing)).Name))
+                        ? LeftParam()
+                        : RightParam()).Name))
                 .WithWriteDefaultsSetTo(_writeDefaultsForFaceExpressions);
         }
 
-        private static string LeftParam(bool useGestureWeightCorrection, bool useSmoothing)
+        private static string LeftParam()
         {
-            if (useSmoothing)
-                return CgeSharedLayerUtils.HaiGestureComboLeftWeightSmoothing;
-
-            if (useGestureWeightCorrection)
-                return CgeSharedLayerUtils.HaiGestureComboLeftWeightProxy;
-
-            return "GestureLeftWeight";
+            return "GestureLeft";
         }
 
-        private static string RightParam(bool useGestureWeightCorrection, bool useSmoothing)
+        private static string RightParam()
         {
-            if (useSmoothing)
-                return CgeSharedLayerUtils.HaiGestureComboRightWeightSmoothing;
-
-            if (useGestureWeightCorrection)
-                return CgeSharedLayerUtils.HaiGestureComboRightWeightProxy;
-
-            return "GestureRightWeight";
+            return "GestureRight";
         }
 
         private CgeAacFlState CreateDualBlendState(Motion clip, Motion resting, Motion posingLeft, Motion posingRight, CgeAacFlStateMachine ssm)
         {
             return ssm.NewState(ThisStringWillBeDiscardedLater())
-                .WithAnimation(CreateDualBlendTree(resting, clip, posingLeft, posingRight, _useGestureWeightCorrection, _useSmoothing))
+                .WithAnimation(CreateDualBlendTree(resting, clip, posingLeft, posingRight))
                 .WithWriteDefaultsSetTo(_writeDefaultsForFaceExpressions);
         }
 
@@ -673,7 +648,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
             return blendTree;
         }
 
-        private Motion CreateDualBlendTree(Motion atZero, Motion atOne, Motion atLeft, Motion atRight, bool useGestureWeightCorrection, bool useSmoothing)
+        private Motion CreateDualBlendTree(Motion atZero, Motion atOne, Motion atLeft, Motion atRight)
         {
             ChildMotion[] motions = {
                 new ChildMotion {motion = atZero, timeScale = 1, position = Vector2.zero},
@@ -685,8 +660,8 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
             var blendTree = new BlendTree
             {
                 name = "autoBT_" + ThisStringWillBeDiscardedLater(),
-                blendParameter = LeftParam(useGestureWeightCorrection, useSmoothing),
-                blendParameterY = RightParam(useGestureWeightCorrection, useSmoothing),
+                blendParameter = LeftParam(),
+                blendParameterY = RightParam(),
                 blendType = BlendTreeType.FreeformDirectional2D,
                 children = motions,
                 hideFlags = HideFlags.HideInHierarchy

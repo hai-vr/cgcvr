@@ -5,7 +5,6 @@ using Hai.ComboGesture.Scripts.Editor.Internal;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
-using VRC.SDK3.Avatars.Components;
 
 namespace Hai.ComboGesture.Scripts.Editor.EditorUI
 {
@@ -166,19 +165,6 @@ namespace Hai.ComboGesture.Scripts.Editor.EditorUI
         public bool IsFirstTimeSetup()
         {
             return _state.FirstTimeSetup;
-        }
-
-        public void TryAutoSetup()
-        {
-            var firstAvatar = Object.FindObjectOfType<VRCAvatarDescriptor>();
-            if (firstAvatar != null)
-            {
-                var itsAnimator = firstAvatar.GetComponent<Animator>();
-                if (itsAnimator != null)
-                {
-                    SetPreviewSetup(itsAnimator);
-                }
-            }
         }
 
         public void MarkFirstTimeSetup()

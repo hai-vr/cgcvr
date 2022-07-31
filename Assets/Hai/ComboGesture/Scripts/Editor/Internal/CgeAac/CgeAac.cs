@@ -4,7 +4,6 @@ using System.Reflection;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
-using VRC.SDK3.Avatars.Components;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
 
@@ -15,11 +14,6 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
         public static CgeAacFlBase Create(CgeAacConfiguration configuration)
         {
             return new CgeAacFlBase(configuration);
-        }
-
-        internal static AnimatorController AnimatorOf(VRCAvatarDescriptor ad, VRCAvatarDescriptor.AnimLayerType animLayerType)
-        {
-            return (AnimatorController) ad.baseAnimationLayers.First(it => it.type == animLayerType).animatorController;
         }
 
         internal static AnimationClip NewClip(CgeAacConfiguration component, string suffix)
@@ -114,7 +108,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
     public struct CgeAacConfiguration
     {
         public string SystemName;
-        public VRCAvatarDescriptor AvatarDescriptor;
+        public AnimatorController AnimatorController;
         public Transform AnimatorRoot;
         public Transform DefaultValueRoot;
         public AnimatorController AssetContainer;
@@ -200,6 +194,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
         public CgeAacFlFloatParameterGroup FloatParameters(params CgeAacFlFloatParameter[] parameters) => _stateMachine.BackingAnimator().FloatParameters(parameters);
         public CgeAacFlIntParameterGroup IntParameters(params CgeAacFlIntParameter[] parameters) => _stateMachine.BackingAnimator().IntParameters(parameters);
         public CgeAacAv3 Av3() => new CgeAacAv3(_stateMachine.BackingAnimator());
+        public CgeAacCvr Cvr() => new CgeAacCvr(_stateMachine.BackingAnimator());
 
         public CgeAacFlLayer OverrideValue(CgeAacFlBoolParameter toBeForced, bool value)
         {
@@ -420,46 +415,10 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
 
         private void RemoveLayerOnAllControllers(string layerName)
         {
-            var layers = _configuration.AvatarDescriptor.baseAnimationLayers.Select(layer => layer.animatorController).Where(layer => layer != null).Distinct().ToList();
-            foreach (var customAnimLayer in layers)
-            {
-                new CgeAacAnimatorRemoval((AnimatorController) customAnimLayer).RemoveLayer(_configuration.DefaultsProvider.ConvertLayerName(layerName));
-            }
+            new CgeAacAnimatorRemoval(_configuration.AnimatorController).RemoveLayer(_configuration.DefaultsProvider.ConvertLayerName(layerName));
         }
 
-        public CgeAacFlLayer CreateMainFxLayer() => DoCreateMainLayerOnController(VRCAvatarDescriptor.AnimLayerType.FX);
-        public CgeAacFlLayer CreateMainGestureLayer() => DoCreateMainLayerOnController(VRCAvatarDescriptor.AnimLayerType.Gesture);
-        public CgeAacFlLayer CreateMainActionLayer() => DoCreateMainLayerOnController(VRCAvatarDescriptor.AnimLayerType.Action);
-        public CgeAacFlLayer CreateMainIdleLayer() => DoCreateMainLayerOnController(VRCAvatarDescriptor.AnimLayerType.Additive);
-        public CgeAacFlLayer CreateMainLocomotionLayer() => DoCreateMainLayerOnController(VRCAvatarDescriptor.AnimLayerType.Base);
-        public CgeAacFlLayer CreateMainAv3Layer(VRCAvatarDescriptor.AnimLayerType animLayerType) => DoCreateMainLayerOnController(animLayerType);
-
-        public CgeAacFlLayer CreateSupportingFxLayer(string suffix) => DoCreateSupportingLayerOnController(VRCAvatarDescriptor.AnimLayerType.FX, suffix);
-        public CgeAacFlLayer CreateSupportingGestureLayer(string suffix) => DoCreateSupportingLayerOnController(VRCAvatarDescriptor.AnimLayerType.Gesture, suffix);
-        public CgeAacFlLayer CreateSupportingActionLayer(string suffix) => DoCreateSupportingLayerOnController(VRCAvatarDescriptor.AnimLayerType.Action, suffix);
-        public CgeAacFlLayer CreateSupportingIdleLayer(string suffix) => DoCreateSupportingLayerOnController(VRCAvatarDescriptor.AnimLayerType.Additive, suffix);
-        public CgeAacFlLayer CreateSupportingLocomotionLayer(string suffix) => DoCreateSupportingLayerOnController(VRCAvatarDescriptor.AnimLayerType.Base, suffix);
-        public CgeAacFlLayer CreateSupportingAv3Layer(VRCAvatarDescriptor.AnimLayerType animLayerType, string suffix) => DoCreateSupportingLayerOnController(animLayerType, suffix);
-
-        public CgeAacFlLayer CreateMainArbitraryControllerLayer(AnimatorController controller) => DoCreateLayer(controller, _configuration.DefaultsProvider.ConvertLayerName(_configuration.SystemName));
         public CgeAacFlLayer CreateSupportingArbitraryControllerLayer(AnimatorController controller, string suffix) => DoCreateLayer(controller, _configuration.DefaultsProvider.ConvertLayerNameWithSuffix(_configuration.SystemName, suffix));
-        public CgeAacFlLayer CreateFirstArbitraryControllerLayer(AnimatorController controller) => DoCreateLayer(controller, controller.layers[0].name);
-
-        private CgeAacFlLayer DoCreateMainLayerOnController(VRCAvatarDescriptor.AnimLayerType animType)
-        {
-            var animator = CgeAacV0.AnimatorOf(_configuration.AvatarDescriptor, animType);
-            var layerName = _configuration.DefaultsProvider.ConvertLayerName(_configuration.SystemName);
-
-            return DoCreateLayer(animator, layerName);
-        }
-
-        private CgeAacFlLayer DoCreateSupportingLayerOnController(VRCAvatarDescriptor.AnimLayerType animType, string suffix)
-        {
-            var animator = CgeAacV0.AnimatorOf(_configuration.AvatarDescriptor, animType);
-            var layerName = _configuration.DefaultsProvider.ConvertLayerNameWithSuffix(_configuration.SystemName, suffix);
-
-            return DoCreateLayer(animator, layerName);
-        }
 
         private CgeAacFlLayer DoCreateLayer(AnimatorController animator, string layerName)
         {
@@ -473,11 +432,6 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
         {
             var emptyClip = DummyClipLasting(1, CgeAacFlUnit.Frames);
             return emptyClip;
-        }
-
-        public CgeAacVrcAssetLibrary VrcAssets()
-        {
-            return new CgeAacVrcAssetLibrary();
         }
 
         public void ClearPreviousAssets()
@@ -494,6 +448,34 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
         }
     }
 
+    public class CgeAacCvr
+    {
+        private readonly CgeAacBackingAnimator _backingAnimator;
+
+        internal CgeAacCvr(CgeAacBackingAnimator backingAnimator)
+        {
+            _backingAnimator = backingAnimator;
+        }
+
+        // ReSharper disable InconsistentNaming
+        public CgeAacFlEnumPseudoParameter<CvrGesture> GestureLeft => _backingAnimator.EnumPseudoParameter<CvrGesture>("GestureLeft");
+        public CgeAacFlEnumPseudoParameter<CvrGesture> GestureRight => _backingAnimator.EnumPseudoParameter<CvrGesture>("GestureRight");
+        // ReSharper restore InconsistentNaming
+
+        public enum CvrGesture
+        {
+            // Specify all the values explicitly. The declaration order is irrelevant, but matches VRC enumeration order.
+            Neutral = 0,
+            Fist = 1,
+            HandOpen = -1,
+            Fingerpoint = 4,
+            Victory = 5,
+            RockNRoll = 6,
+            HandGun = 3,
+            ThumbsUp = 2
+        }
+    }
+
     public class CgeAacAv3
     {
         private readonly CgeAacBackingAnimator _backingAnimator;
@@ -504,99 +486,8 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal.CgeAac
         }
 
         // ReSharper disable InconsistentNaming
-        public CgeAacFlBoolParameter IsLocal => _backingAnimator.BoolParameter("IsLocal");
-        public CgeAacFlEnumIntParameter<Av3Viseme> Viseme => _backingAnimator.EnumParameter<Av3Viseme>("Viseme");
-        public CgeAacFlEnumIntParameter<Av3Gesture> GestureLeft => _backingAnimator.EnumParameter<Av3Gesture>("GestureLeft");
-        public CgeAacFlEnumIntParameter<Av3Gesture> GestureRight => _backingAnimator.EnumParameter<Av3Gesture>("GestureRight");
-        public CgeAacFlFloatParameter GestureLeftWeight => _backingAnimator.FloatParameter("GestureLeftWeight");
-        public CgeAacFlFloatParameter GestureRightWeight => _backingAnimator.FloatParameter("GestureRightWeight");
-        public CgeAacFlFloatParameter AngularY => _backingAnimator.FloatParameter("AngularY");
-        public CgeAacFlFloatParameter VelocityX => _backingAnimator.FloatParameter("VelocityX");
-        public CgeAacFlFloatParameter VelocityY => _backingAnimator.FloatParameter("VelocityY");
-        public CgeAacFlFloatParameter VelocityZ => _backingAnimator.FloatParameter("VelocityZ");
-        public CgeAacFlFloatParameter Upright => _backingAnimator.FloatParameter("Upright");
-        public CgeAacFlBoolParameter Grounded => _backingAnimator.BoolParameter("Grounded");
-        public CgeAacFlBoolParameter Seated => _backingAnimator.BoolParameter("Seated");
-        public CgeAacFlBoolParameter AFK => _backingAnimator.BoolParameter("AFK");
-        public CgeAacFlIntParameter TrackingType => _backingAnimator.IntParameter("TrackingType");
-        public CgeAacFlIntParameter VRMode => _backingAnimator.IntParameter("VRMode");
-        public CgeAacFlBoolParameter MuteSelf => _backingAnimator.BoolParameter("MuteSelf");
         public CgeAacFlBoolParameter InStation => _backingAnimator.BoolParameter("InStation");
-        public CgeAacFlFloatParameter Voice => _backingAnimator.FloatParameter("Voice");
         // ReSharper restore InconsistentNaming
-
-        public ICgeAacFlCondition ItIsRemote() => IsLocal.IsFalse();
-        public ICgeAacFlCondition ItIsLocal() => IsLocal.IsTrue();
-
-        public enum Av3Gesture
-        {
-            // Specify all the values explicitly because they should be dictated by VRChat, not enumeration order.
-            Neutral = 0,
-            Fist = 1,
-            HandOpen = 2,
-            Fingerpoint = 3,
-            Victory = 4,
-            RockNRoll = 5,
-            HandGun = 6,
-            ThumbsUp = 7
-        }
-
-        public enum Av3Viseme
-        {
-            // Specify all the values explicitly because they should be dictated by VRChat, not enumeration order.
-            // ReSharper disable InconsistentNaming
-            sil = 0,
-            pp = 1,
-            ff = 2,
-            th = 3,
-            dd = 4,
-            kk = 5,
-            ch = 6,
-            ss = 7,
-            nn = 8,
-            rr = 9,
-            aa = 10,
-            e = 11,
-            ih = 12,
-            oh = 13,
-            ou = 14
-            // ReSharper restore InconsistentNaming
-        }
-    }
-
-    public class CgeAacVrcAssetLibrary
-    {
-        public AvatarMask LeftHandAvatarMask()
-        {
-            return AssetDatabase.LoadAssetAtPath<AvatarMask>("Assets/VRCSDK/Examples3/Animation/Masks/vrc_Hand Left.mask");
-        }
-
-        public AvatarMask RightHandAvatarMask()
-        {
-            return AssetDatabase.LoadAssetAtPath<AvatarMask>("Assets/VRCSDK/Examples3/Animation/Masks/vrc_Hand Right.mask");
-        }
-
-        public AnimationClip ProxyForGesture(CgeAacAv3.Av3Gesture gesture, bool masculine)
-        {
-            return AssetDatabase.LoadAssetAtPath<AnimationClip>("Assets/VRCSDK/Examples3/Animation/ProxyAnim/" + ResolveProxyFilename(gesture, masculine));
-        }
-
-        private static string ResolveProxyFilename(CgeAacAv3.Av3Gesture gesture, bool masculine)
-        {
-            switch (gesture)
-            {
-                case CgeAacAv3.Av3Gesture.Neutral: return masculine ? "proxy_hands_idle.anim" : "proxy_hands_idle2.anim";
-                case CgeAacAv3.Av3Gesture.Fist: return "proxy_hands_fist.anim";
-                case CgeAacAv3.Av3Gesture.HandOpen: return "proxy_hands_open.anim";
-                case CgeAacAv3.Av3Gesture.Fingerpoint: return "proxy_hands_point.anim";
-                case CgeAacAv3.Av3Gesture.Victory: return "proxy_hands_peace.anim";
-                case CgeAacAv3.Av3Gesture.RockNRoll: return "proxy_hands_rock.anim";
-                case CgeAacAv3.Av3Gesture.HandGun: return "proxy_hands_gun.anim";
-                case CgeAacAv3.Av3Gesture.ThumbsUp: return "proxy_hands_thumbs_up.anim";
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(gesture), gesture, null);
-            }
-        }
     }
 
     public class CgeAacAnimatorRemoval

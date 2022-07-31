@@ -11,12 +11,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
     {
         private const float DynamicsTransitionDuration = 0.1f;
 
-        internal const string HaiGestureComboLeftWeightProxy = "_Hai_GestureLWProxy";
-        internal const string HaiGestureComboRightWeightProxy = "_Hai_GestureRWProxy";
         internal const string HaiVirtualActivity = "_Hai_GestureVirtualActivity";
-        internal const string HaiGestureComboLeftWeightSmoothing = "_Hai_GestureLWSmoothing";
-        internal const string HaiGestureComboRightWeightSmoothing = "_Hai_GestureRWSmoothing";
-        internal const string HaiGestureComboSmoothingFactor = "_Hai_GestureSmoothingFactor";
 
         public static ICgeManifest FromMapper(GestureComboStageMapper mapper, AnimationClip fallbackWhenAnyClipIsNull, bool universalAnalogSupport)
         {

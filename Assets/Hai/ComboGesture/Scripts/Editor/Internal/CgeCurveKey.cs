@@ -52,16 +52,6 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
             return new CgeCurveKey(binding.path, binding.type, binding.propertyName);
         }
 
-        public bool IsTransformOrMuscleCurve()
-        {
-            return Type == typeof(Transform) || Type == typeof(Animator);
-        }
-
-        public bool IsTransformCurve()
-        {
-            return Type == typeof(Transform);
-        }
-
         public bool IsMuscleCurve()
         {
             return Type == typeof(Animator);

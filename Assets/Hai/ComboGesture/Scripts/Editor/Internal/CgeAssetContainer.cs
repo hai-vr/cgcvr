@@ -20,7 +20,7 @@ namespace Hai.ComboGesture.Scripts.Editor.Internal
                 AnimatorRoot = null,
                 AssetContainer = _holder,
                 AssetKey = "GeneratedCGE",
-                AvatarDescriptor = null,
+                AnimatorController = null,
                 DefaultsProvider = new CgeDefaultsProvider(true),
                 SystemName = "CGE",
                 DefaultValueRoot = null
